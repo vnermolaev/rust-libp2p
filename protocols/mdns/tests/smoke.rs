@@ -142,6 +142,7 @@ async fn test_expired_async_std_ipv4() -> Result<(), Box<dyn Error>> {
     };
 
     run_timebound_test(
+        TestRuntime::StdAsync,
         run_peer_expiration_test(config),
         Duration::from_secs(6)
     ).await
@@ -156,6 +157,7 @@ async fn test_expired_async_std_ipv6() -> Result<(), Box<dyn Error>> {
     };
 
     run_timebound_test(
+        TestRuntime::StdAsync,
         run_peer_expiration_test(config),
         Duration::from_secs(6)
     ).await
@@ -170,6 +172,7 @@ async fn test_expired_tokio_ipv4() -> Result<(), Box<dyn Error>> {
     };
 
     run_timebound_test(
+        TestRuntime::Tokio,
         run_peer_expiration_test(config),
         Duration::from_secs(6)
     ).await
@@ -184,17 +187,25 @@ async fn test_expired_tokio_ipv6() -> Result<(), Box<dyn Error>> {
     };
 
     run_timebound_test(
+        TestRuntime::Tokio,
         run_peer_expiration_test(config),
         Duration::from_secs(6)
     ).await
 }
 
-async fn run_timebound_test(fut: impl Future<Output=Result<(), Box<dyn Error>>>, bound: Duration) -> Result<(), Box<dyn Error>> {
-    let result = async_std::future::timeout(bound, fut)
-        .await;
+async fn run_timebound_test(runtime: TestRuntime, fut: impl Future<Output=Result<(), Box<dyn Error>>>, bound: Duration) -> Result<(), Box<dyn Error>> {
+    match runtime {
+        TestRuntime::Tokio => tokio::time::timeout(bound, fut)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn Error>),
+        TestRuntime::StdAsync => async_std::future::timeout(bound, fut)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn Error>),
+    }.map(|_| ())
 
-    match result {
-        Ok(res) => res,
-        Err(err) => Err::<(), Box<dyn Error>>(Box::new(err))
-    }
+}
+
+enum TestRuntime {
+    Tokio,
+    StdAsync,
 }
