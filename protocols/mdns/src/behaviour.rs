@@ -54,7 +54,11 @@ pub struct MdnsConfig {
     /// peer joins the network. Receiving an mdns packet resets the timer
     /// preventing unnecessary traffic.
     pub query_interval: Duration,
-    /// IP address for multicast.
+    /// Internet protocol version (v4 or v6) to use.
+    ///
+    /// Note that the provided IP address itself is ignored and instead the
+    /// unspecified address (`0.0.0.0` or `::`) of the corresponding version is
+    /// used.
     pub multicast_addr: IpAddr,
 }
 
@@ -144,12 +148,12 @@ impl Mdns {
             }
         };
         let send_socket = {
-            let addrs = [
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-                SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
-            ];
+            let addr = match config.multicast_addr {
+                IpAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+                IpAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+            };
 
-            let socket = std::net::UdpSocket::bind(&addrs[..])?;
+            let socket = std::net::UdpSocket::bind(addr)?;
             Async::new(socket)?
         };
         let if_watch = if_watch::IfWatcher::new().await?;
@@ -406,7 +410,7 @@ impl NetworkBehaviour for Mdns {
                 while let Some(pos) = self
                     .discovered_nodes
                     .iter()
-                    .position(|(_, _, exp)| *exp < now)
+                    .position(|(_, _, exp)| *exp <= now)
                 {
                     let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
                     expired.push((peer_id, addr));
